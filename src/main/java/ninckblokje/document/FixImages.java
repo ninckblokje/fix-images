@@ -28,8 +28,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static javax.xml.xpath.XPathConstants.NODE;
-import static javax.xml.xpath.XPathConstants.NODESET;
+import static javax.xml.xpath.XPathConstants.*;
 
 public class FixImages {
 
@@ -94,17 +93,17 @@ public class FixImages {
                 notFoundEmbeddedRelationIds.stream().distinct().collect(Collectors.toList())
         ));
 
-//        List<Graphic> graphics = parseGraphics(doc);
-//        graphics.stream()
-//                .filter(graphic -> graphic.getRelationId().equals("rId7"))
-//                .forEach(graphic -> System.out.println(String.format("%d - %s - %s", graphic.getIndex() + 1, graphic.getRelationId(), graphic.getFilename())));
+        List<Graphic> graphics = parseGraphics(doc);
+        graphics.stream()
+                .filter(graphic -> graphic.getRelationId().equals("rId7"))
+                .forEach(graphic -> System.out.println(String.format("%d - %s - %s", graphic.getIndex() + 1, graphic.getRelationId(), graphic.getFilename())));
 
-        ImageFile maxImageFile = getMaxImageFile();
-        RId maxRId = getMaxRId(relDoc);
-        addMissingImages(doc, relDoc, maxRId, maxImageFile);
-
-        saveDocument(relDoc, new File("data/working/word/_rels/document.xml.rels"));
-        saveDocument(doc, new File("data/working/word/document.xml"));
+//        ImageFile maxImageFile = getMaxImageFile();
+//        RId maxRId = getMaxRId(relDoc);
+//        addMissingImages(doc, relDoc, maxRId, maxImageFile);
+//
+//        saveDocument(relDoc, new File("data/working/word/_rels/document.xml.rels"));
+//        saveDocument(doc, new File("data/working/word/document.xml"));
     }
 
     static void addMissingImages(Document doc, Document relDoc, RId rId, ImageFile imageFile) throws IOException {
@@ -112,6 +111,7 @@ public class FixImages {
         RIdWalker rIdWalker = new RIdWalker(rId);
 
         Files.list(Path.of("data/missingImages"))
+                .filter(path -> isImageMissing(doc, path))
                 .map(path -> ImmutableTriple.of(path, rIdWalker.next(), imageFileWalker.next()))
                 .forEach(pair -> addMissingImage(doc, relDoc, pair.getMiddle(), pair.getRight(), pair.getLeft()));
     }
@@ -198,6 +198,22 @@ public class FixImages {
 
         System.out.println("Found " + rId);
         return rId;
+    }
+
+    static boolean isImageMissing(Document doc, Path path) {
+        XPath xPath = XPathFactory.newInstance().newXPath();
+        xPath.setNamespaceContext(getNamespaceContext());
+
+        XPathExpression countXPathExpression = null;
+        try {
+            countXPathExpression = xPath.compile(String.format("count(//a:graphic/a:graphicData/pic:pic[pic:nvPicPr/pic:cNvPr/@name=\"%s\"]/pic:blipFill/a:blip[@r:embed=\"rId7\"])", path.getFileName()));
+            double count = (Double) countXPathExpression.evaluate(doc, NUMBER);
+
+            System.out.println(path.getFileName() + " is missing: " + count);
+            return count == 1.0;
+        } catch (XPathExpressionException ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
     static NamespaceContext getNamespaceContext() {
