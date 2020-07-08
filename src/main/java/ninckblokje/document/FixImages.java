@@ -112,20 +112,29 @@ public class FixImages {
 
         Files.list(Path.of("data/missingImages"))
                 .filter(path -> isImageMissing(doc, path))
-                .map(path -> ImmutableTriple.of(path, rIdWalker.next(), imageFileWalker.next()))
+                .map(path -> ImmutableTriple.of(path, rIdWalker, imageFileWalker))
                 .forEach(pair -> addMissingImage(doc, relDoc, pair.getMiddle(), pair.getRight(), pair.getLeft()));
     }
 
-    static void addMissingImage(Document doc, Document relDoc, RId rId, ImageFile imageFile, Path path) {
+    static void addMissingImage(Document doc, Document relDoc, RIdWalker rIdWalker, ImageFileWalker imageFileWalker, Path path) {
+        double missingImageCount = imageMissingCount(doc, path);
+
+        System.out.println(path.getFileName() + " is missing " + missingImageCount + " times");
+
         try {
-            System.out.println(path.getFileName() + " will get " + rId.getrId());
+            for (double i=0.0; i<missingImageCount; i=i+1.0) {
+                RId rId = rIdWalker.next();
+                ImageFile imageFile = imageFileWalker.next();
 
-            Path targetFile = Path.of("data/working/word/media", imageFile.getFilename());
-            System.out.println("Copying " + path + " to " + targetFile);
-            Files.copy(path, targetFile);
+                System.out.println(path.getFileName() + " will get " + rId.getrId() + " on index " + i);
 
-            createNewRelationship(relDoc, rId, imageFile);
-            updateGraphics(doc, rId, path);
+                Path targetFile = Path.of("data/working/word/media", imageFile.getFilename());
+                System.out.println("Copying " + path + " to " + targetFile);
+                Files.copy(path, targetFile);
+
+                createNewRelationship(relDoc, rId, imageFile);
+                updateGraphics(doc, rId, path);
+            }
 
             Path doneFile = Path.of("data/done", path.getFileName().toString());
             System.out.println("Done with " + path);
@@ -139,7 +148,7 @@ public class FixImages {
         XPath xPath = XPathFactory.newInstance().newXPath();
         xPath.setNamespaceContext(getNamespaceContext());
 
-        XPathExpression idXPathExpression = xPath.compile(String.format("//a:graphic/a:graphicData/pic:pic[pic:nvPicPr/pic:cNvPr/@name=\"%s\"]/pic:blipFill/a:blip", path.getFileName()));
+        XPathExpression idXPathExpression = xPath.compile(String.format("//a:graphic/a:graphicData/pic:pic[pic:nvPicPr/pic:cNvPr/@name=\"%s\"]/pic:blipFill/a:blip[@r:embed=\"rId7\"]", path.getFileName()));
         Element blibElement = (Element) idXPathExpression.evaluate(doc, NODE);
         blibElement.setAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "embed", rId.getrId());
     }
@@ -201,6 +210,10 @@ public class FixImages {
     }
 
     static boolean isImageMissing(Document doc, Path path) {
+        return imageMissingCount(doc, path) >= 1.0;
+    }
+
+    static double imageMissingCount(Document doc, Path path) {
         XPath xPath = XPathFactory.newInstance().newXPath();
         xPath.setNamespaceContext(getNamespaceContext());
 
@@ -210,7 +223,7 @@ public class FixImages {
             double count = (Double) countXPathExpression.evaluate(doc, NUMBER);
 
             System.out.println(path.getFileName() + " is missing: " + count);
-            return count == 1.0;
+            return count;
         } catch (XPathExpressionException ex) {
             throw new RuntimeException(ex);
         }
